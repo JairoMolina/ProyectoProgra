@@ -11,7 +11,6 @@ import java.util.concurrent.Executors;
 import gt.edu.umg.gpscamara.FotosGuardadas.DatabaseHelper;
 import gt.edu.umg.gpscamara.FotosGuardadas.Foto;
 
-
 public class VerFotosActivity extends AppCompatActivity {
     private RecyclerView recyclerView;
     private FotosAdapter adapter;

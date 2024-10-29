@@ -4,7 +4,11 @@ import android.content.Intent;
 import android.graphics.Bitmap;
 import android.os.Bundle;
 import android.provider.MediaStore;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.widget.Button;
+import android.widget.CheckBox;
+import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
@@ -21,6 +25,8 @@ public class FotosTomadas extends AppCompatActivity {
     private Button bttnGuardar;
     private Button bttnEliminar;
     private Button bttnTomarFoto;
+    private EditText editTextNombre;
+    private CheckBox checkBoxAcepto;
     private static final int REQUEST_IMAGE_CAPTURE = 1;
     private double currentLatitude;
     private double currentLongitude;
@@ -37,6 +43,8 @@ public class FotosTomadas extends AppCompatActivity {
         bttnGuardar = findViewById(R.id.bttnGuardar);
         bttnEliminar = findViewById(R.id.bttnEliminar);
         bttnTomarFoto = findViewById(R.id.bttnTomarFoto);
+        editTextNombre = findViewById(R.id.editTextNombre);
+        checkBoxAcepto = findViewById(R.id.checkBoxAcepto);
 
         // Inicializar base de datos
         dbHelper = DatabaseHelper.getInstance(getApplicationContext());
@@ -52,26 +60,53 @@ public class FotosTomadas extends AppCompatActivity {
             imageViewFotoTomada.setImageBitmap(currentImageBitmap);
         }
 
-        // Configurar botones
-        bttnGuardar.setOnClickListener(v -> {
-            if (currentImageBitmap != null) {
-                savePhotoToDatabase(currentImageBitmap, currentLatitude, currentLongitude);
+        // Configurar el CheckBox para habilitar o deshabilitar el botón Guardar
+        checkBoxAcepto.setOnCheckedChangeListener((buttonView, isChecked) -> validateInputs());
+
+        // Agregar un TextWatcher al campo de nombre para monitorear cambios en el texto
+        editTextNombre.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+                // No es necesario hacer nada aquí en este caso
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+                // No es necesario hacer nada aquí en este caso
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                // Validar los inputs después de cada cambio en el texto del nombre
+                validateInputs();
             }
         });
 
+        bttnGuardar.setOnClickListener(v -> {
+            if (currentImageBitmap != null) {
+                String nombre = editTextNombre.getText().toString();
+                boolean aceptado = checkBoxAcepto.isChecked(); // Obtener el estado del checkbox
+                savePhotoToDatabase(currentImageBitmap, nombre, currentLatitude, currentLongitude, aceptado);
+            }
+        });
+        // Configurar el botón Eliminar
         bttnEliminar.setOnClickListener(v -> {
-            // Limpiar la imagen y deshabilitar botones
             imageViewFotoTomada.setImageDrawable(null);
             currentImageBitmap = null;
             bttnGuardar.setEnabled(false);
             Toast.makeText(this, "Foto eliminada", Toast.LENGTH_SHORT).show();
         });
 
+        // Configurar el botón Tomar Foto
         bttnTomarFoto.setOnClickListener(v -> {
-            // Abrir la cámara nuevamente
             Intent takePictureIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
             startActivityForResult(takePictureIntent, REQUEST_IMAGE_CAPTURE);
         });
+    }
+
+    private void validateInputs() {
+        String nombre = editTextNombre.getText().toString();
+        bttnGuardar.setEnabled(!nombre.isEmpty() && currentImageBitmap != null); // Solo valida nombre e imagen
     }
 
     @Override
@@ -82,16 +117,16 @@ public class FotosTomadas extends AppCompatActivity {
             currentImageBitmap = (Bitmap) extras.get("data");
             if (currentImageBitmap != null) {
                 imageViewFotoTomada.setImageBitmap(currentImageBitmap);
-                bttnGuardar.setEnabled(true);
+                validateInputs();
             }
         }
     }
 
-    private void savePhotoToDatabase(Bitmap imageBitmap, double latitude, double longitude) {
+    private void savePhotoToDatabase(Bitmap imageBitmap, String nombre, double latitude, double longitude, boolean aceptado) {
         executorService.execute(() -> {
             try {
                 byte[] imageBytes = BitmapUtils.bitmapToByteArray(imageBitmap);
-                long id = dbHelper.insertFoto(imageBytes, latitude, longitude);
+                long id = dbHelper.insertFoto(imageBytes, nombre, latitude, longitude, aceptado);
 
                 runOnUiThread(() -> {
                     if (id != -1) {
@@ -103,8 +138,7 @@ public class FotosTomadas extends AppCompatActivity {
                 });
             } catch (Exception e) {
                 runOnUiThread(() -> {
-                    Toast.makeText(this, "Error al guardar la foto: " + e.getMessage(),
-                            Toast.LENGTH_LONG).show();
+                    Toast.makeText(this, "Error al guardar la foto: " + e.getMessage(), Toast.LENGTH_LONG).show();
                 });
                 e.printStackTrace();
             }

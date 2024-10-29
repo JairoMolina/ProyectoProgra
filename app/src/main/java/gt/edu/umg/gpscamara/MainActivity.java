@@ -1,14 +1,15 @@
 package gt.edu.umg.gpscamara;
 
-
 import android.Manifest;
 import android.annotation.SuppressLint;
+import android.app.assist.AssistStructure;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.os.Bundle;
 import android.provider.MediaStore;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.ImageView;
 import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
@@ -29,6 +30,7 @@ public class MainActivity extends AppCompatActivity {
     private FusedLocationProviderClient fusedLocationClient;
     private double currentLatitude;
     private double currentLongitude;
+    private CheckBox checkBoxAcepto; // Cambiado a CheckBox
 
     @SuppressLint("MissingInflatedId")
     @Override
@@ -36,17 +38,15 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.maincamara);
 
+        // Inicializar los componentes
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
         bttnCamara1 = findViewById(R.id.bttnCamara1);
         buttnFotosGuardadas = findViewById(R.id.buttnFotosTomadas);
+        checkBoxAcepto = findViewById(R.id.checkBoxAcepto); // Asegúrate de que este ID sea correcto en el XML
 
-        bttnCamara1.setOnClickListener(v -> {
-            verificarPermisos();
-        });
-
-        buttnFotosGuardadas.setOnClickListener(v -> {
-            abrirFotosGuardadas();
-        });
+        // Configurar los listeners
+        bttnCamara1.setOnClickListener(v -> verificarPermisos());
+        buttnFotosGuardadas.setOnClickListener(v -> abrirFotosGuardadas());
     }
 
     private void abrirFotosGuardadas() {
@@ -85,6 +85,11 @@ public class MainActivity extends AppCompatActivity {
                                 "No se pudo obtener la ubicación",
                                 Toast.LENGTH_SHORT).show();
                     }
+                })
+                .addOnFailureListener(e -> {
+                    Toast.makeText(MainActivity.this,
+                            "Error al obtener la ubicación: " + e.getMessage(),
+                            Toast.LENGTH_SHORT).show();
                 });
     }
 
@@ -98,18 +103,31 @@ public class MainActivity extends AppCompatActivity {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == 0 && resultCode == RESULT_OK) {
             Bundle extras = data.getExtras();
-            Bitmap imageBitmap = (Bitmap) extras.get("data");
-
-            // Iniciar FotosTomadas con la imagen y coordenadas
-            Intent intent = new Intent(MainActivity.this, FotosTomadas.class);
-            intent.putExtra("imageBitmap", imageBitmap);
-            intent.putExtra("currentLatitude", currentLatitude);
-            intent.putExtra("currentLongitude", currentLongitude);
-            startActivity(intent);
+            if (extras != null) {
+                Bitmap imageBitmap = (Bitmap) extras.get("data");
+                if (imageBitmap != null) {
+                    // Iniciar FotosTomadas con la imagen y coordenadas
+                    Intent intent = new Intent(MainActivity.this, FotosTomadas.class);
+                    intent.putExtra("imageBitmap", imageBitmap);
+                    intent.putExtra("currentLatitude", currentLatitude);
+                    intent.putExtra("currentLongitude", currentLongitude);
+                    startActivity(intent);
+                } else {
+                    Toast.makeText(this, "Error: no se pudo obtener la imagen.", Toast.LENGTH_SHORT).show();
+                }
+            } else {
+                Toast.makeText(this, "Error: extras están vacíos.", Toast.LENGTH_SHORT).show();
+            }
         }
     }
 
-    private void guardarFoto(Bitmap imageBitmap) {
+
+    private void guardarFoto(Bitmap imageBitmap, String nombre) {
+        if (imageBitmap == null) {
+            Toast.makeText(this, "Error: No hay imagen para guardar", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
         ExecutorService executorService = Executors.newSingleThreadExecutor();
         executorService.execute(() -> {
             try {
@@ -117,27 +135,32 @@ public class MainActivity extends AppCompatActivity {
 
                 // Usar DatabaseHelper en lugar de Room
                 DatabaseHelper dbHelper = DatabaseHelper.getInstance(getApplicationContext());
-                long id = dbHelper.insertFoto(imageBytes, currentLatitude, currentLongitude);
+                boolean aceptado = checkBoxAcepto.isChecked(); // Obtener el estado del checkbox
+                long id = dbHelper.insertFoto(imageBytes, nombre, currentLatitude, currentLongitude, aceptado);
 
                 runOnUiThread(() -> {
-                    Toast.makeText(this, "Foto guardada exitosamente", Toast.LENGTH_SHORT).show();
-                    ImageView imageView = findViewById(R.id.imageViewFotoTomada);
-                    if (imageView != null) {
-                        imageView.setImageDrawable(null);
+                    if (id != -1) {
+                        Toast.makeText(this, "Foto guardada exitosamente", Toast.LENGTH_SHORT).show();
+                        ImageView imageView = findViewById(R.id.imageViewFotoTomada);
+                        if (imageView != null) {
+                            imageView.setImageDrawable(null);
+                        }
+                        Button btnGuardar = findViewById(R.id.bttnGuardar);
+                        Button btnEliminar = findViewById(R.id.bttnEliminar);
+                        if (btnGuardar != null) btnGuardar.setEnabled(false);
+                        if (btnEliminar != null) btnEliminar.setEnabled(false);
+                    } else {
+                        Toast.makeText(this, "Error al guardar la foto", Toast.LENGTH_SHORT).show();
                     }
-                    Button btnGuardar = findViewById(R.id.bttnGuardar);
-                    Button btnEliminar = findViewById(R.id.bttnEliminar);
-                    if (btnGuardar != null) btnGuardar.setEnabled(false);
-                    if (btnEliminar != null) btnEliminar.setEnabled(false);
                 });
             } catch (Exception e) {
                 runOnUiThread(() -> {
-                    Toast.makeText(this, "Error al guardar la foto: " + e.getMessage(),
-                            Toast.LENGTH_LONG).show();
+                    Toast.makeText(this, "Error al guardar la foto: " + e.getMessage(), Toast.LENGTH_LONG).show();
                 });
                 e.printStackTrace();
+            } finally {
+                executorService.shutdown();
             }
-            executorService.shutdown();
         });
     }
 
@@ -150,6 +173,8 @@ public class MainActivity extends AppCompatActivity {
                     grantResults[0] == PackageManager.PERMISSION_GRANTED &&
                     grantResults[1] == PackageManager.PERMISSION_GRANTED) {
                 obtenerUbicacionYAbrirCamara();
+            } else {
+                Toast.makeText(this, "Permisos no concedidos", Toast.LENGTH_SHORT).show();
             }
         }
     }

@@ -27,12 +27,16 @@ public class FotosAdapter extends RecyclerView.Adapter<FotosAdapter.FotoViewHold
     static class FotoViewHolder extends RecyclerView.ViewHolder {
         ImageView imageView;
         TextView tvCoordenadas;
+        TextView tvNombre; // Agregar TextView para el nombre
+        TextView tvAceptado; // Agregar TextView para el estado de aceptación
         Button btnEliminar;
 
         FotoViewHolder(View itemView) {
             super(itemView);
             imageView = itemView.findViewById(R.id.imageViewFoto);
             tvCoordenadas = itemView.findViewById(R.id.tvCoordenadas);
+            tvNombre = itemView.findViewById(R.id.tvNombre); // Inicializar
+            tvAceptado = itemView.findViewById(R.id.tvAceptado); // Inicializar
             btnEliminar = itemView.findViewById(R.id.btnEliminarFoto);
         }
     }
@@ -68,6 +72,12 @@ public class FotosAdapter extends RecyclerView.Adapter<FotosAdapter.FotoViewHold
         // Mostrar coordenadas
         holder.tvCoordenadas.setText(String.format("Latitud: %.4f\nLongitud: %.4f",
                 foto.getLatitude(), foto.getLongitude()));
+
+        // Mostrar el nombre
+        holder.tvNombre.setText(foto.getNombre()); // Asumiendo que tienes un método getNombre()
+
+        // Mostrar el estado de aceptación
+        holder.tvAceptado.setText(foto.isAceptado() ? "Aceptado" : "Rechazado"); // Asumiendo que tienes un método isAceptado()
 
         // Configurar botón eliminar
         holder.btnEliminar.setOnClickListener(v -> {
